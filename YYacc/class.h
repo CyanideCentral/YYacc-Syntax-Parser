@@ -14,15 +14,30 @@ public:
 	int dot;
 	string la;
 
-	Production();
+	Production(string leftNT);
 	~Production();
+	bool equalTo(Production* p);
+	bool equalCore(Production* p);
+	Production* extendRight(string symbol);
 };
 
 class State {
 public:
 	int id;
 	vector<Production*>* prods;
+	unordered_map<string, int>* edges;
 
 	State(int num);
 	~State();
+};
+
+class Analyzer {
+private:
+	vector<State*>* states;
+	vector<Production*>* grammar;
+public:
+	vector<unordered_map<string, int>*> toParsingTable(vector<Production*>* augGrammar);
+
+	Analyzer();
+	~Analyzer();
 };
