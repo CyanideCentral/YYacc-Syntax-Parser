@@ -1,5 +1,6 @@
 #pragma once
 #include<iostream>
+#include<sstream>
 #include<string>
 #include<algorithm>
 #include<unordered_set>
@@ -37,16 +38,19 @@ public:
 
 class Analyzer {
 private:
+	int num_tokens;
 	vector<State*>* states;
 	vector<Production*>* grammar;
-	vector<string>* tokens;
+	vector<string>* symbols;
 	//Map from non-terminal to its productions
 	unordered_map<string, vector<int>*>* prodmap;
+	unordered_map<string, int>* symbolmap;
 
+	State* newState();
 	void toClosure(State* st);
 	bool isTerminal(string name);
 public:
-	vector<unordered_map<string, int>*> toParsingTable(vector<Production*>* augGrammar, vector<string>* tokenList);
+	string toParsingTable(vector<Production*>* augGrammar, vector<string>* tokenList);
 
 	Analyzer();
 	~Analyzer();

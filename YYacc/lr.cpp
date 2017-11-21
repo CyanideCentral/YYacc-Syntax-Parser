@@ -52,6 +52,9 @@ State::State(int num) {
 }
 
 State::~State() {
+	for (int i = 0; i < prods->size(); i++) {
+		delete prods->at(i);
+	}
 	delete prods;
 	delete edges;
 }
@@ -73,6 +76,12 @@ bool State::insert(Production * prod, int dot, string la) {
 
 	}
 	return false;
+}
+
+State * Analyzer::newState() {
+	State* ns = new State(states->size());
+	states->push_back(ns);
+	return ns;
 }
 
 void Analyzer::toClosure(State * st) {
@@ -115,12 +124,18 @@ void Analyzer::toClosure(State * st) {
 }
 
 bool Analyzer::isTerminal(string name) {
-	return find(tokens->begin(), tokens->end(), name) != tokens->end();
+	return find(symbols->begin(), symbols->end(), name) != symbols->end();
 }
 
-vector<unordered_map<string, int>*> Analyzer::toParsingTable(vector<Production*>* augGrammar, vector<string>* tokenList) {
+string Analyzer::toParsingTable(vector<Production*>* augGrammar, vector<string>* tokenList) {
 	grammar = augGrammar;
-	tokens = tokenList;
+	symbols->insert(symbols->end(), tokenList->begin(), tokenList->end());
+	num_tokens = tokenList->size();
+	for (int h = 0; h < grammar->size(); h++) {
+		if (find(symbols->begin(), symbols->end(), grammar->at(h)->left) == symbols->end()) {
+			symbols->push_back(grammar->at(h)->left);
+		}
+	}
 
 	for (int i = 0; i < tokenList->size(); i++) {
 		Production* p = (*grammar)[i];
@@ -132,6 +147,57 @@ vector<unordered_map<string, int>*> Analyzer::toParsingTable(vector<Production*>
 			(*prodmap)[p->left]->push_back(i);
 		}
 	}
+
+	states->push_back(new State(0));
+	Production* firstpr = grammar->at(0)->clone();
+	states->at(0)->prods->push_back(firstpr);
+	//Expand the FA
+	for (int i = 0; i < states->size(); i++) {
+		State* cur = states->at(i);
+		//Inferred edges and new states (might be identical to existent state)
+		unordered_map<string, vector<Production*>*>* bp = new unordered_map<string, vector<Production*>*>;
+		for (int j = 0; j < cur->prods->size(); j++) {
+			Production* pr = cur->prods->at(j);
+			if (pr->dot == pr->right->size()) continue;
+			string next = pr->right->at(pr->dot);
+			Production* shifted = pr->clone();
+			shifted->dot++;
+			if (bp->find(next) == bp->end()) {
+				vector<Production*>* np = new vector<Production*>;
+				np->push_back(shifted);
+				bp->insert(pair<string, vector<Production*>*>(next, np));
+			}
+			else {
+				bp->at(next)->push_back(shifted);
+			}
+		}
+		//Check identical states, create new ones
+		for (unordered_map<string, vector<Production*>*>::iterator it = bp->begin(); it != bp->end(); it++) {
+			bool found = false;
+			for (int k = 0; k < states->size(); k++) {
+				if (states->at(k)->equalTo(it->second)) {
+					cur->edges->insert(pair<string, int>(it->first, k));
+					found = true;
+					break;
+				}
+			}
+			if (!found) {
+				State* created = newState();
+				created->prods->insert(created->prods->end(), it->second->begin(), it->second->end());
+				toClosure(created);
+				cur->edges->insert(pair<string, int>(it->first, created->id));
+			}
+			else {
+				for (int l = 0; l < it->second->size(); l++) {
+					delete it->second->at(l);
+				}
+			}
+			delete it->second;
+		}
+		delete bp;
+	}
+	ostringstream os;
+	return os.str();
 }
 
 Analyzer::Analyzer() {
