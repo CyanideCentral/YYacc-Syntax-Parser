@@ -20,14 +20,19 @@ bool Production::equalTo(Production * p) {
 	return true;
 }
 
-bool Production::equalCore(Production * p) {
+bool Production::equalCore(Production * p, bool ignoreDot = false) {
 	if (left.compare(p->left)) return false;
 	if (right->size() != p->right->size()) return false;
 	for (int i = 0; i < right->size(); i++) {
 		if ((*right)[i].compare((*(p->right))[i])) return false;
 	}
-	if (dot != p->dot) return false;
+	if (!ignoreDot && dot != p->dot) return false;
 	return true;
+}
+
+string Production::toString()
+{
+	return string();
 }
 
 Production * Production::extendRight(string symbol) {
@@ -124,7 +129,16 @@ void Analyzer::toClosure(State * st) {
 }
 
 bool Analyzer::isTerminal(string name) {
-	return find(symbols->begin(), symbols->end(), name) != symbols->end();
+	return (find(symbols->begin(), symbols->end(), name) - symbols->begin()) < num_tokens;
+}
+
+int Analyzer::prodid(Production * prod) {
+	for (int i = 0; i < grammar->size(); i++) {
+		if (prod->equalCore(grammar->at(i), true)) {
+			return i;
+		}
+	}
+	return -1;
 }
 
 string Analyzer::toParsingTable(vector<Production*>* augGrammar, vector<string>* tokenList) {
@@ -158,7 +172,8 @@ string Analyzer::toParsingTable(vector<Production*>* augGrammar, vector<string>*
 		unordered_map<string, vector<Production*>*>* bp = new unordered_map<string, vector<Production*>*>;
 		for (int j = 0; j < cur->prods->size(); j++) {
 			Production* pr = cur->prods->at(j);
-			if (pr->dot == pr->right->size()) continue;
+			//If end of expression or a terminal is reached, no edge is created
+			if (pr->dot == pr->right->size()||isTerminal(pr->right->at(pr->dot))) continue;
 			string next = pr->right->at(pr->dot);
 			Production* shifted = pr->clone();
 			shifted->dot++;
@@ -197,6 +212,41 @@ string Analyzer::toParsingTable(vector<Production*>* augGrammar, vector<string>*
 		delete bp;
 	}
 	ostringstream os;
+	os << "vector<unordered_map<string, int>> pt = { ";
+	vector<unordered_map<string, int>> pt = { unordered_map<string, int>{{"expr", 2}, {"id", -2}}, unordered_map<string, int>{} };
+	for (int i = 0; i < states->size(); i++) {
+		os << " unordered_map<string, int>{";
+		int found = -1;
+		vector<Production*>* prodlist = states->at(i)->prods;
+		for (int j = 0; j < prodlist->size(); j++) {
+			if (prodlist->at(j)->dot == prodlist->at(j)->right->size()) {
+				if (found < 0) found = j;
+				else {
+					cout << "Reduce-reduce conflict between " << prodlist->at(found)->toString() << " and " << prodlist->at(j)->toString();
+				}
+			}
+		}
+
+		unordered_map<string, int>* edges = states->at(i)->edges;
+		int mapsize = 0;
+		if (found = -1) {
+			for (unordered_set<string>::iterator it = prodlist->at(found)->la->begin(); it != prodlist->at(found)->la->end(); it++) {
+				os << "{\"" << *it << "\", " << -prodid(prodlist->at(found)) << "}";
+				if (distance(prodlist->at(found)->la->begin(), it) < (int)(prodlist->at(found)->la->size() - 1)) os << ", ";
+				else os << "}";
+				mapsize++;
+			}
+		}
+		for (unordered_map<string, int>::iterator it = edges->begin(); it != edges->end(); it++) {
+			if (it == edges->begin() && mapsize) os << ", ";
+			os << "{\"" << it->first << "\", " << it->second << "}";
+			if (distance(edges->begin(), it) < (int)(edges->size() - 1)) os << ", ";
+			else os << "}";
+			mapsize++;
+		}
+		if (i < states->size() - 1) os << ", \n";
+		else os << " };\n";
+	}
 	return os.str();
 }
 

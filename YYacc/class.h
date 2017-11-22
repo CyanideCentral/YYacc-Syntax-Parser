@@ -19,7 +19,8 @@ public:
 	Production(string leftNT);
 	~Production();
 	bool equalTo(Production* p);
-	bool equalCore(Production* p);
+	bool equalCore(Production* p, bool ignoreDot = false);
+	string toString();
 	Production* extendRight(string symbol);
 	Production* clone();
 };
@@ -49,6 +50,7 @@ private:
 	State* newState();
 	void toClosure(State* st);
 	bool isTerminal(string name);
+	int prodid(Production* prod);
 public:
 	string toParsingTable(vector<Production*>* augGrammar, vector<string>* tokenList);
 
