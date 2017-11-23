@@ -90,42 +90,49 @@ State * Analyzer::newState() {
 }
 
 void Analyzer::toClosure(State * st) {
-	unordered_map<string, unordered_set<string>*>* lamap = new unordered_map<string, unordered_set<string>*>;
-	for (int i = 0; i < st->prods->size(); i++) {
-		Production* pr = (*(st->prods))[i];
-		//calculate First()
-		if (pr->dot < pr->right->size() && !isTerminal(pr->right->at(pr->dot))) {
-			if (lamap->find(pr->left) == lamap->end()) (*lamap)[pr->left] = new unordered_set<string>;
-			if (pr->dot+1 == pr->right->size()) {
-				(*lamap)[pr->left]->insert(pr->la->begin(), pr->la->end());
-			}
-			else {
-				(*lamap)[pr->left]->insert(pr->right->at(pr->dot + 1));
-			}
-		}
-	}
-	for (unordered_map<string, unordered_set<string>*>::iterator it = lamap->begin(); it != lamap->end(); it++) {
-		vector<int>* head = prodmap->at(it->first);
-		for (int j = 0; j < head->size(); j++) {
-			Production* pr = grammar->at(head->at(j));
-			bool found = false;
-			for (int k = 0; k < st->prods->size(); k++) {
-				//Same production found, add lookaheads
-				if ((*(st->prods))[k]->equalCore(pr)) {
-					(*(st->prods))[k]->la->insert(it->second->begin(), it->second->end());
-					found = true;
-					break;
+	int change = 1;
+	while (change) {
+		change = 0;
+		unordered_map<string, unordered_set<string>*>* lamap = new unordered_map<string, unordered_set<string>*>;
+		for (int i = 0; i < st->prods->size(); i++) {
+			Production* pr = (*(st->prods))[i];
+			//calculate First()
+			if (pr->dot < pr->right->size() && !isTerminal(pr->right->at(pr->dot))) {
+				if (lamap->find(pr->left) == lamap->end()) (*lamap)[pr->left] = new unordered_set<string>;
+				if (pr->dot + 1 == pr->right->size()) {
+					(*lamap)[pr->left]->insert(pr->la->begin(), pr->la->end());
+				}
+				else {
+					(*lamap)[pr->left]->insert(pr->right->at(pr->dot + 1));
 				}
 			}
-			//Insert production to this state
-			if (!found) {
-				Production* copy = pr->clone();
-				copy->la->insert(it->second->begin(), it->second->end());
-				st->prods->push_back(copy);
+		}
+		for (unordered_map<string, unordered_set<string>*>::iterator it = lamap->begin(); it != lamap->end(); it++) {
+			vector<int>* head = prodmap->at(it->first);
+			for (int j = 0; j < head->size(); j++) {
+				Production* pr = grammar->at(head->at(j));
+				bool found = false;
+				for (int k = 0; k < st->prods->size(); k++) {
+					//Same production found, add lookaheads
+					if ((*(st->prods))[k]->equalCore(pr)) {
+						int oldsize = (*(st->prods))[k]->la->size();
+						(*(st->prods))[k]->la->insert(it->second->begin(), it->second->end());
+						found = true;
+						if ((*(st->prods))[k]->la->size()>oldsize) change++;
+						break;
+					}
+				}
+				//Insert production to this state
+				if (!found) {
+					Production* copy = pr->clone();
+					copy->la->insert(it->second->begin(), it->second->end());
+					st->prods->push_back(copy);
+					change++;
+				}
 			}
 		}
+		delete lamap;
 	}
-	delete lamap;
 }
 
 bool Analyzer::isTerminal(string name) {
@@ -143,6 +150,7 @@ int Analyzer::prodid(Production * prod) {
 
 string Analyzer::toParsingTable(vector<Production*>* augGrammar, vector<string>* tokenList) {
 	grammar = augGrammar;
+	//Merge token list and non-terminals
 	symbols->insert(symbols->end(), tokenList->begin(), tokenList->end());
 	num_tokens = tokenList->size();
 	for (int h = 0; h < grammar->size(); h++) {
@@ -151,6 +159,7 @@ string Analyzer::toParsingTable(vector<Production*>* augGrammar, vector<string>*
 		}
 	}
 
+	//construct production map
 	for (int i = 0; i < tokenList->size(); i++) {
 		Production* p = (*grammar)[i];
 		if (prodmap->find(p->left) != prodmap->end()) {
@@ -162,9 +171,12 @@ string Analyzer::toParsingTable(vector<Production*>* augGrammar, vector<string>*
 		}
 	}
 
+	//Insert I0 state
 	states->push_back(new State(0));
 	Production* firstpr = grammar->at(0)->clone();
+	firstpr->la->insert("$");
 	states->at(0)->prods->push_back(firstpr);
+
 	//Expand the FA
 	for (int i = 0; i < states->size(); i++) {
 		State* cur = states->at(i);
