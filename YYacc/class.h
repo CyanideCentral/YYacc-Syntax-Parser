@@ -6,6 +6,7 @@
 #include<unordered_set>
 #include<unordered_map>
 #include<vector>
+#include<stack>
 
 using namespace std;
 
@@ -37,7 +38,7 @@ public:
 	bool insert(Production* prod, int dot = -1, string la = "");
 };
 
-class Analyzer {
+class GrammarAnalyzer {
 private:
 	int num_tokens;
 	vector<State*>* states;
@@ -52,8 +53,18 @@ private:
 	bool isTerminal(string name);
 	int prodid(Production* prod);
 public:
-	string toParsingTable(vector<Production*>* augGrammar, vector<string>* tokenList);
+	vector<unordered_map<string, int>*>* toParsingTable(vector<Production*>* augGrammar, vector<string>* tokenList);
 
-	Analyzer();
-	~Analyzer();
+	GrammarAnalyzer();
+	~GrammarAnalyzer();
+};
+
+class Parser {
+private:
+	vector<Production*>* grammar;
+	vector<unordered_map<string, int>*>* pt;
+public:
+	Parser(vector<Production*>* augGrammar, vector<unordered_map<string, int>*>* parsingTable);
+	~Parser();
+	void parse(vector<string>* tokens, ostream& out);
 };

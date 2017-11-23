@@ -14,7 +14,7 @@ void test() {
 	Production* p4 = new Production("C");
 	p1->extendRight("'d'");
 	vector<Production*> grammar{ p1, p2, p3, p4 };
-	Analyzer* a = new Analyzer;
+	GrammarAnalyzer* a = new GrammarAnalyzer;
 	a->toParsingTable(&grammar);
 }
 
