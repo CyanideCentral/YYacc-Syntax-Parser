@@ -5,6 +5,7 @@
 #include<string>
 #include<algorithm>
 #include<unordered_set>
+#include<set>
 #include<unordered_map>
 #include<vector>
 #include<stack>
@@ -16,7 +17,8 @@ public:
 	string left;
 	vector<string>* right;
 
-	Production(string leftNT);
+	Production();
+	Production(string pr);
 	~Production();
 	string toString();
 	Production* extendRight(string symbol);
@@ -27,7 +29,7 @@ class SimpleProd {
 public:
 	int id;
 	int dot;
-	unordered_set<string>* la;
+	set<string>* la;
 
 	SimpleProd();
 	~SimpleProd();
@@ -46,7 +48,6 @@ public:
 	State(int num);
 	~State();
 	bool equalTo(vector<SimpleProd*>* ns);
-	bool insert(Production* prod, int dot = -1, string la = "");
 };
 
 class GrammarAnalyzer {
@@ -66,7 +67,7 @@ private:
 	unordered_set<string>* first(string symbol);
 	//int prodid(Production* prod);
 public:
-	vector<unordered_map<string, int>*>* toParsingTable(vector<Production*>* augGrammar, vector<string>* tokenList);
+	string toParsingTable(vector<Production*>* augGrammar, vector<string>* tokenList);
 
 	GrammarAnalyzer();
 	~GrammarAnalyzer();

@@ -1,8 +1,14 @@
 #include"class.h"
 
-Production::Production(string leftNT) {
-	left = leftNT;
+Production::Production() {
 	right = new vector<string>;
+}
+
+Production::Production(string pr) {
+	vector<string>* items = split(pr, " \t\r\n");
+	left = items->at(0);
+	items->erase(items->begin(), items->begin()+2);
+	right = items;
 }
 
 Production::~Production() {
@@ -15,7 +21,6 @@ string Production::toString() {
 	for (int i = 0; i < right->size(); i++) {
 		os << right->at(i) << " ";
 	}
-	os << ", ";
 	return os.str();
 }
 
@@ -25,7 +30,8 @@ Production * Production::extendRight(string symbol) {
 }
 
 Production * Production::clone() {
-	Production* copy = new Production(left);
+	Production* copy = new Production();
+	copy->left = copy->left;
 	for (int i = 0; i < right->size(); i++) {
 		copy->right->push_back((*right)[i]);
 	}
@@ -33,7 +39,7 @@ Production * Production::clone() {
 }
 
 SimpleProd::SimpleProd() {
-	la = new unordered_set<string>;
+	la = new set<string>;
 	dot = 0;
 }
 
@@ -42,11 +48,12 @@ SimpleProd::~SimpleProd() {
 }
 
 bool SimpleProd::equalTo(SimpleProd * p) {
-	if (!equalCore(p)) return false;
-	for (unordered_set<string>::iterator it = la->begin(); it != la->end(); it++) {
+	if (id != p->id) return false;
+	if (dot != p->dot) return false;
+	/*for (set<string>::iterator it = la->begin(); it != la->end(); it++) {
 		if (find(p->la->begin(), p->la->end(), *it) == p->la->end()) return false;
-	}
-	return true;
+	}*/
+	return (*la) == (*(p->la));
 }
 
 bool SimpleProd::equalCore(SimpleProd * p, bool ignoreDot) {
@@ -58,7 +65,7 @@ bool SimpleProd::equalCore(SimpleProd * p, bool ignoreDot) {
 string SimpleProd::toString() {
 	ostringstream os;
 	os << id << ", ";
-	for (unordered_set<string>::iterator it = la->begin(); it != la->end(); it++) {
+	for (set<string>::iterator it = la->begin(); it != la->end(); it++) {
 		os << *it;
 		if (distance(it, la->end())>1) os << "|";
 	}
@@ -91,19 +98,19 @@ bool State::equalTo(vector<SimpleProd*>* ns) {
 	if (prods->size() != ns->size()) return false;
 	for (int i = 0; i < ns->size(); i++) {
 		//If no same production is found in this state
-		if (none_of(prods->begin(), prods->end(), [ns, i](SimpleProd* p) {return ns->at(i)->equalTo(p); })) {
+		/*if (none_of(prods->begin(), prods->end(), [ns, i](SimpleProd* p) {return ns->at(i)->equalTo(p); })) {
 			return false;
+		}*/
+		int flag = 0;
+		for (int j = 0; j < prods->size(); j++) {
+			if (ns->at(i)->equalTo(prods->at(j))) {
+				flag = 1;
+				break;
+			}
 		}
+		if (!flag) return false;
 	}
 	return true;
-}
-
-bool State::insert(Production * prod, int dot, string la) {
-	Production * np = new Production(prod->left);
-	for (int i = 0; i < prod->right->size(); i++) {
-
-	}
-	return false;
 }
 
 State * GrammarAnalyzer::newState() {
@@ -204,7 +211,7 @@ bool GrammarAnalyzer::isTerminal(string name) {
 	return false;
 }
 
-vector<unordered_map<string, int>*>* GrammarAnalyzer::toParsingTable(vector<Production*>* augGrammar, vector<string>* tokenList) {
+string GrammarAnalyzer::toParsingTable(vector<Production*>* augGrammar, vector<string>* tokenList) {
 	grammar = augGrammar;
 	//Merge token list and non-terminals
 	symbols->insert(symbols->end(), tokenList->begin(), tokenList->end());
@@ -305,7 +312,7 @@ vector<unordered_map<string, int>*>* GrammarAnalyzer::toParsingTable(vector<Prod
 		unordered_map<string, int>* ptItem = new unordered_map<string, int>;
 		unordered_map<string, int>* edges = states->at(i)->edges;
 		if (found > -1) {
-			for (unordered_set<string>::iterator it = prodlist->at(found)->la->begin(); it != prodlist->at(found)->la->end(); it++) {
+			for (set<string>::iterator it = prodlist->at(found)->la->begin(); it != prodlist->at(found)->la->end(); it++) {
 				ptItem->insert(pair<string, int>(*it, - prodlist->at(found)->id - 1));
 			}
 		}
@@ -314,46 +321,23 @@ vector<unordered_map<string, int>*>* GrammarAnalyzer::toParsingTable(vector<Prod
 		}
 		pt->push_back(ptItem);
 	}
-	return pt;
 
 	//Code to generate code
-	/*ostringstream os;
-	os << "vector<unordered_map<string, int>> pt = { ";
-	vector<unordered_map<string, int>> pt = { unordered_map<string, int>{{"expr", 2}, {"id", -2}}, unordered_map<string, int>{} };
-	for (int i = 0; i < states->size(); i++) {
-		os << " unordered_map<string, int>{";
-		int found = -1;
-		vector<Production*>* prodlist = states->at(i)->prods;
-		for (int j = 0; j < prodlist->size(); j++) {
-			if (prodlist->at(j)->dot == prodlist->at(j)->right->size()) {
-				if (found < 0) found = j;
-				else {
-					cout << "Reduce-reduce conflict between " << prodlist->at(found)->toString() << " and " << prodlist->at(j)->toString();
-				}
-			}
-		}
-
-		unordered_map<string, int>* edges = states->at(i)->edges;
-		int mapsize = 0;
-		if (found > -1) {
-			for (unordered_set<string>::iterator it = prodlist->at(found)->la->begin(); it != prodlist->at(found)->la->end(); it++) {
-				os << "{\"" << *it << "\", " << -prodid(prodlist->at(found)) << "}";
-				if (distance(prodlist->at(found)->la->begin(), it) < (int)(prodlist->at(found)->la->size() - 1)) os << ", ";
-				else os << "}";
-				mapsize++;
-			}
-		}
+	ostringstream os;
+	os << "vector<unordered_map<string, int>*>* pt = new vector<unordered_map<string, int>*>(); " << endl;
+	for (int i = 0; i < pt->size(); i++) {
+		os << endl << "pt->push_back(new unordered_map<string, int>{";
+		unordered_map<string, int>* edges = pt->at(i);
+		int j = 0;
 		for (unordered_map<string, int>::iterator it = edges->begin(); it != edges->end(); it++) {
-			if (it == edges->begin() && mapsize) os << ", ";
 			os << "{\"" << it->first << "\", " << it->second << "}";
-			if (distance(edges->begin(), it) < (int)(edges->size() - 1)) os << ", ";
-			else os << "}";
-			mapsize++;
+			if (j < edges->size() - 1) os << ", ";
+			else os << "} ";
+			j++;
 		}
-		if (i < states->size() - 1) os << ", \n";
-		else os << " };\n";
+		os << ");" << endl;
 	}
-	return os.str();*/
+	return os.str();
 }
 
 GrammarAnalyzer::GrammarAnalyzer() {
@@ -380,14 +364,14 @@ Parser::~Parser() {
 }
 
 void Parser::parse(vector<string>* tokens, ostream & out) {
-	int state = 0, i = 0;
+	int state = 0, i = 0, action = 0;
 	tokens->push_back("'$'");
 	stack<int>* stateStack = new stack<int>;
 	stateStack->push(0);
 	stack<string>* symbolStack = new stack<string>;
 	try {
 		while (1) {
-			int action = pt->at(stateStack->top())->at(tokens->at(i));
+			action = pt->at(stateStack->top())->at(tokens->at(i));
 			//shift
 			if (action >= 0) {
 				stateStack->push(action);
@@ -424,7 +408,16 @@ void Parser::parse(vector<string>* tokens, ostream & out) {
 		}
 	}
 	catch (out_of_range e) {
-		cout << "Error caused by input." << endl;
+		cout << "Error caused by token " << i + 1 << ": " << tokens->at(i) << endl << "action: " << action << endl;
+		while (!symbolStack->empty()) {
+			cout << symbolStack->top()<<" ";
+			symbolStack->pop();
+		}
+		cout << endl;
+		while (!stateStack->empty()) {
+			cout << stateStack->top() << " ";
+			stateStack->pop();
+		}
 		return;
 	}
 }
