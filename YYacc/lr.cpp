@@ -3,31 +3,10 @@
 Production::Production(string leftNT) {
 	left = leftNT;
 	right = new vector<string>;
-	la = new unordered_set<string>;
-	dot = 0;
 }
 
 Production::~Production() {
 	delete right;
-	delete la;
-}
-
-bool Production::equalTo(Production * p) {
-	if (!equalCore(p)) return false;
-	for (unordered_set<string>::iterator it = la->begin(); it != la->end(); it++) {
-		if (find(p->la->begin(), p->la->end(), *it) == p->la->end()) return false;
-	}
-	return true;
-}
-
-bool Production::equalCore(Production * p, bool ignoreDot = false) {
-	if (left.compare(p->left)) return false;
-	if (right->size() != p->right->size()) return false;
-	for (int i = 0; i < right->size(); i++) {
-		if ((*right)[i].compare((*(p->right))[i])) return false;
-	}
-	if (!ignoreDot && dot != p->dot) return false;
-	return true;
 }
 
 string Production::toString() {
@@ -37,10 +16,6 @@ string Production::toString() {
 		os << right->at(i) << " ";
 	}
 	os << ", ";
-	for (unordered_set<string>::iterator it = la->begin(); it != la->end(); it++) {
-		os << *it;
-		if (distance(it, la->end())>1) os << "|";
-	}
 	return os.str();
 }
 
@@ -51,17 +26,56 @@ Production * Production::extendRight(string symbol) {
 
 Production * Production::clone() {
 	Production* copy = new Production(left);
-	copy->dot = dot;
-	copy->la->insert(la->begin(),la->end());
 	for (int i = 0; i < right->size(); i++) {
 		copy->right->push_back((*right)[i]);
 	}
 	return copy;
 }
 
+SimpleProd::SimpleProd() {
+	la = new unordered_set<string>;
+	dot = 0;
+}
+
+SimpleProd::~SimpleProd() {
+	delete la;
+}
+
+bool SimpleProd::equalTo(SimpleProd * p) {
+	if (!equalCore(p)) return false;
+	for (unordered_set<string>::iterator it = la->begin(); it != la->end(); it++) {
+		if (find(p->la->begin(), p->la->end(), *it) == p->la->end()) return false;
+	}
+	return true;
+}
+
+bool SimpleProd::equalCore(SimpleProd * p, bool ignoreDot) {
+	if (id != p->id) return false;
+	if (!ignoreDot && dot != p->dot) return false;
+	return true;
+}
+
+string SimpleProd::toString() {
+	ostringstream os;
+	os << id << ", ";
+	for (unordered_set<string>::iterator it = la->begin(); it != la->end(); it++) {
+		os << *it;
+		if (distance(it, la->end())>1) os << "|";
+	}
+	return os.str();
+}
+
+SimpleProd * SimpleProd::clone() {
+	SimpleProd* copy = new SimpleProd();
+	copy->dot = dot;
+	copy->la->insert(la->begin(), la->end());
+	copy->id = id;
+	return copy;
+}
+
 State::State(int num) {
 	id = num;
-	prods = new vector<Production*>;
+	prods = new vector<SimpleProd*>;
 	edges = new unordered_map<string, int>;
 }
 
@@ -73,11 +87,11 @@ State::~State() {
 	delete edges;
 }
 
-bool State::equalTo(vector<Production*>* ns) {
+bool State::equalTo(vector<SimpleProd*>* ns) {
 	if (prods->size() != ns->size()) return false;
 	for (int i = 0; i < ns->size(); i++) {
 		//If no same production is found in this state
-		if (none_of(prods->begin(), prods->end(), [ns, i](Production* p) {return ns->at(i)->equalTo(p); })) {
+		if (none_of(prods->begin(), prods->end(), [ns, i](SimpleProd* p) {return ns->at(i)->equalTo(p); })) {
 			return false;
 		}
 	}
@@ -98,63 +112,96 @@ State * GrammarAnalyzer::newState() {
 	return ns;
 }
 
-void GrammarAnalyzer::toClosure(State * st) {
+unordered_set<string>* GrammarAnalyzer::first(string symbol) {
+
+	unordered_set<string>* fs = new unordered_set<string>;
+	if (isTerminal(symbol)) {
+		fs->insert(symbol);
+		return fs;
+	}
+	unordered_set<string>* vts = new unordered_set<string>;
+	vts->insert(symbol);
+	while (1) {
+		int size = vts->size();
+		for (int i = 0; i < grammar->size(); i++) {
+			if (vts->find(grammar->at(i)->left) != vts->end() && !isTerminal(grammar->at(i)->right->at(0))) {
+				vts->insert(grammar->at(i)->right->at(0));
+			}
+		}
+		if (vts->size() == size) break;
+	}
+	for (int i = 0; i < grammar->size(); i++) {
+		if (vts->find(grammar->at(i)->left) != vts->end() && isTerminal(grammar->at(i)->right->at(0))) {
+			fs->insert(grammar->at(i)->right->at(0));
+		}
+	}
+	return fs;
+}
+
+void GrammarAnalyzer::toClosure(vector<SimpleProd*>* st) {
 	int change = 1;
 	while (change) {
 		change = 0;
 		unordered_map<string, unordered_set<string>*>* lamap = new unordered_map<string, unordered_set<string>*>;
-		for (int i = 0; i < st->prods->size(); i++) {
-			Production* pr = (*(st->prods))[i];
+		for (int i = 0; i < st->size(); i++) {
+			SimpleProd* spr = (*st)[i];
+			Production* pr = grammar->at(spr->id);
+			if (spr->dot == pr->right->size()) continue;
+			string reach = pr->right->at(spr->dot);
 			//calculate First()
-			if (pr->dot < pr->right->size() && !isTerminal(pr->right->at(pr->dot))) {
-				if (lamap->find(pr->left) == lamap->end()) (*lamap)[pr->left] = new unordered_set<string>;
-				if (pr->dot + 1 == pr->right->size()) {
-					(*lamap)[pr->left]->insert(pr->la->begin(), pr->la->end());
+			if (!isTerminal(reach)) {
+				if (lamap->find(reach) == lamap->end()) {
+					lamap->insert(pair<string, unordered_set<string>*>(reach, new unordered_set<string>));
+				}
+				if (spr->dot + 1 == pr->right->size()) {
+					(*lamap)[reach]->insert(spr->la->begin(), spr->la->end());
 				}
 				else {
-					(*lamap)[pr->left]->insert(pr->right->at(pr->dot + 1));
+					string next = pr->right->at(spr->dot + 1);
+					if (isTerminal(next)) {
+						(*lamap)[reach]->insert(next);
+					}
+					else {
+						unordered_set<string>* fs = firstmap->at(next);
+						(*lamap)[reach]->insert(fs->begin(), fs->end());
+					}
 				}
 			}
 		}
 		for (unordered_map<string, unordered_set<string>*>::iterator it = lamap->begin(); it != lamap->end(); it++) {
 			vector<int>* head = prodmap->at(it->first);
 			for (int j = 0; j < head->size(); j++) {
-				Production* pr = grammar->at(head->at(j));
+				SimpleProd* pr = new SimpleProd();
+				pr->id = head->at(j);
 				bool found = false;
-				for (int k = 0; k < st->prods->size(); k++) {
+				for (int k = 0; k < st->size(); k++) {
 					//Same production found, add lookaheads
-					if ((*(st->prods))[k]->equalCore(pr)) {
-						int oldsize = (*(st->prods))[k]->la->size();
-						(*(st->prods))[k]->la->insert(it->second->begin(), it->second->end());
+					if ((*st)[k]->equalCore(pr)) {
+						int oldsize = (*st)[k]->la->size();
+						(*st)[k]->la->insert(it->second->begin(), it->second->end());
 						found = true;
-						if ((*(st->prods))[k]->la->size()>oldsize) change++;
+						if ((*st)[k]->la->size()>oldsize) change++;
 						break;
 					}
 				}
 				//Insert production to this state
 				if (!found) {
-					Production* copy = pr->clone();
+					SimpleProd* copy = pr->clone();
 					copy->la->insert(it->second->begin(), it->second->end());
-					st->prods->push_back(copy);
+					st->push_back(copy);
 					change++;
 				}
 			}
+			delete it->second;
 		}
 		delete lamap;
 	}
 }
 
 bool GrammarAnalyzer::isTerminal(string name) {
-	return (find(symbols->begin(), symbols->end(), name) - symbols->begin()) < num_tokens;
-}
-
-int GrammarAnalyzer::prodid(Production * prod) {
-	for (int i = 0; i < grammar->size(); i++) {
-		if (prod->equalCore(grammar->at(i), true)) {
-			return i;
-		}
-	}
-	return -1;
+	if ((find(symbols->begin(), symbols->end(), name) - symbols->begin()) < num_tokens) return true;
+	if (name.length() == 3 && name[0] == '\'' && name[2] == '\'') return true;
+	return false;
 }
 
 vector<unordered_map<string, int>*>* GrammarAnalyzer::toParsingTable(vector<Production*>* augGrammar, vector<string>* tokenList) {
@@ -169,7 +216,7 @@ vector<unordered_map<string, int>*>* GrammarAnalyzer::toParsingTable(vector<Prod
 	}
 
 	//construct production map
-	for (int i = 0; i < tokenList->size(); i++) {
+	for (int i = 0; i < grammar->size(); i++) {
 		Production* p = (*grammar)[i];
 		if (prodmap->find(p->left) != prodmap->end()) {
 			(*prodmap)[p->left]->push_back(i);
@@ -180,36 +227,44 @@ vector<unordered_map<string, int>*>* GrammarAnalyzer::toParsingTable(vector<Prod
 		}
 	}
 
+	//construct First() map
+	for (int i = 0; i < symbols->size(); i++) {
+		firstmap->insert(pair<string, unordered_set<string>*>(symbols->at(i), first(symbols->at(i))));
+	}
+
 	//Insert I0 state
 	states->push_back(new State(0));
-	Production* firstpr = grammar->at(0)->clone();
-	firstpr->la->insert("$");
+	SimpleProd* firstpr = new SimpleProd();
+	firstpr->id = 0;
+	firstpr->la->insert("'$'");
 	states->at(0)->prods->push_back(firstpr);
+	toClosure(states->at(0)->prods);
 
 	//Expand the FA
 	for (int i = 0; i < states->size(); i++) {
 		State* cur = states->at(i);
 		//Inferred edges and new states (might be identical to existent state)
-		unordered_map<string, vector<Production*>*>* bp = new unordered_map<string, vector<Production*>*>;
+		unordered_map<string, vector<SimpleProd*>*>* bp = new unordered_map<string, vector<SimpleProd*>*>;
 		for (int j = 0; j < cur->prods->size(); j++) {
-			Production* pr = cur->prods->at(j);
-			//If end of expression or a terminal is reached, no edge is created
-			if (pr->dot == pr->right->size()||isTerminal(pr->right->at(pr->dot))) continue;
-			string next = pr->right->at(pr->dot);
-			Production* shifted = pr->clone();
+			SimpleProd* pr = cur->prods->at(j);
+			//If end of expressionis reached, no edge is created
+			if (pr->dot == grammar->at(pr->id)->right->size()) continue;
+			string next = grammar->at(pr->id)->right->at(pr->dot);
+			SimpleProd* shifted = pr->clone();
 			shifted->dot++;
 			if (bp->find(next) == bp->end()) {
-				vector<Production*>* np = new vector<Production*>;
+				vector<SimpleProd*>* np = new vector<SimpleProd*>;
 				np->push_back(shifted);
-				bp->insert(pair<string, vector<Production*>*>(next, np));
+				bp->insert(pair<string, vector<SimpleProd*>*>(next, np));
 			}
 			else {
 				bp->at(next)->push_back(shifted);
 			}
 		}
 		//Check identical states, create new ones
-		for (unordered_map<string, vector<Production*>*>::iterator it = bp->begin(); it != bp->end(); it++) {
+		for (unordered_map<string, vector<SimpleProd*>*>::iterator it = bp->begin(); it != bp->end(); it++) {
 			bool found = false;
+			toClosure(it->second);
 			for (int k = 0; k < states->size(); k++) {
 				if (states->at(k)->equalTo(it->second)) {
 					cur->edges->insert(pair<string, int>(it->first, k));
@@ -220,8 +275,8 @@ vector<unordered_map<string, int>*>* GrammarAnalyzer::toParsingTable(vector<Prod
 			if (!found) {
 				State* created = newState();
 				created->prods->insert(created->prods->end(), it->second->begin(), it->second->end());
-				toClosure(created);
 				cur->edges->insert(pair<string, int>(it->first, created->id));
+				cout << "New state: " << created->id << endl;
 			}
 			else {
 				for (int l = 0; l < it->second->size(); l++) {
@@ -236,9 +291,9 @@ vector<unordered_map<string, int>*>* GrammarAnalyzer::toParsingTable(vector<Prod
 	vector<unordered_map<string, int>*>* pt = new vector<unordered_map<string, int>*>;
 	for (int i = 0; i < states->size(); i++) {
 		int found = -1;
-		vector<Production*>* prodlist = states->at(i)->prods;
+		vector<SimpleProd*>* prodlist = states->at(i)->prods;
 		for (int j = 0; j < prodlist->size(); j++) {
-			if (prodlist->at(j)->dot == prodlist->at(j)->right->size()) {
+			if (prodlist->at(j)->dot == grammar->at(prodlist->at(j)->id)->right->size()) {
 				if (found < 0) {
 					found = j;
 				}
@@ -251,12 +306,13 @@ vector<unordered_map<string, int>*>* GrammarAnalyzer::toParsingTable(vector<Prod
 		unordered_map<string, int>* edges = states->at(i)->edges;
 		if (found > -1) {
 			for (unordered_set<string>::iterator it = prodlist->at(found)->la->begin(); it != prodlist->at(found)->la->end(); it++) {
-				ptItem->insert(pair<string, int>(*it, -prodid(prodlist->at(found))));
+				ptItem->insert(pair<string, int>(*it, - prodlist->at(found)->id - 1));
 			}
 		}
 		for (unordered_map<string, int>::iterator it = edges->begin(); it != edges->end(); it++) {
 			ptItem->insert(pair<string, int>(it->first, it->second));
 		}
+		pt->push_back(ptItem);
 	}
 	return pt;
 
@@ -302,7 +358,9 @@ vector<unordered_map<string, int>*>* GrammarAnalyzer::toParsingTable(vector<Prod
 
 GrammarAnalyzer::GrammarAnalyzer() {
 	states = new vector<State*>;
+	symbols = new vector<string>;
 	prodmap = new unordered_map<string, vector<int>*>;
+	firstmap = new unordered_map<string, unordered_set<string>*>;
 	grammar = NULL;
 }
 
@@ -323,44 +381,50 @@ Parser::~Parser() {
 
 void Parser::parse(vector<string>* tokens, ostream & out) {
 	int state = 0, i = 0;
-	tokens->push_back("$");
+	tokens->push_back("'$'");
 	stack<int>* stateStack = new stack<int>;
-	stateStack->push(1);
+	stateStack->push(0);
 	stack<string>* symbolStack = new stack<string>;
-	while(1) {
-		int action = pt->at(stateStack->top())->at(tokens->at(i));
-		//shift
-		if (action >= 0) {
-			stateStack->push(action);
-			symbolStack->push(tokens->at(i));
-			i++;
-		}
-		//reduce
-		else {
-			action = -action - 1;
-			int plen = grammar->at(action)->right->size();
-			for (int j = 0; j < plen; j++) {
-				string back = symbolStack->top();
-				//Production to reduce by contradicts with token in stack
-				if (back.compare(grammar->at(action)->right->at(plen - 1 - j)) != 0) {
-					cout << "Parsing error at token #" << i + 1 << ": " << tokens->at(i);
-					out << " Parsing error encountered.";
+	try {
+		while (1) {
+			int action = pt->at(stateStack->top())->at(tokens->at(i));
+			//shift
+			if (action >= 0) {
+				stateStack->push(action);
+				symbolStack->push(tokens->at(i));
+				i++;
+			}
+			//reduce
+			else {
+				action = -action - 1;
+				int plen = grammar->at(action)->right->size();
+				for (int j = 0; j < plen; j++) {
+					string back = symbolStack->top();
+					//Production to reduce by contradicts with token in stack
+					if (back.compare(grammar->at(action)->right->at(plen - 1 - j)) != 0) {
+						cout << "Parsing error at token #" << i + 1 << ": " << tokens->at(i);
+						out << " Parsing error encountered.";
+						return;
+					}
+					symbolStack->pop();
+					stateStack->pop();
+				}
+				//AKA 'acc'
+				if (action == 0) {
+					out << "ACC" << endl;
+					cout << "Parsing complete." << endl;
 					return;
 				}
-				symbolStack->pop();
-				stateStack->pop();
+				out << grammar->at(action)->toString() << endl;
+				symbolStack->push(grammar->at(action)->left);
+				//Perform goto
+				action = pt->at(stateStack->top())->at(symbolStack->top());
+				stateStack->push(action);
 			}
-			//AKA 'acc'
-			if (action == 0) {
-				out << "ACC" << endl;
-				cout << "Parsing complete." << endl;
-				return;
-			}
-			out << grammar->at(i)->toString() << endl;
-			symbolStack->push(grammar->at(i)->left);
-			//Perform goto
-			action = pt->at(stateStack->top())->at(tokens->at(i));
-			stateStack->push(action);
 		}
+	}
+	catch (out_of_range e) {
+		cout << "Error caused by input." << endl;
+		return;
 	}
 }

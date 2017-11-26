@@ -149,6 +149,7 @@
     <ClInclude Include="class.h" />
   </ItemGroup>
   <ItemGroup>
+    <ClCompile Include="io.cpp" />
     <ClCompile Include="lr.cpp" />
     <ClCompile Include="main.cpp" />
   </ItemGroup>

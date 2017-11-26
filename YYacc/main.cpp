@@ -15,9 +15,9 @@ void test() {
 	p1->extendRight("'d'");
 	vector<Production*> grammar{ p1, p2, p3, p4 };
 	GrammarAnalyzer* a = new GrammarAnalyzer;
-	a->toParsingTable(&grammar);
+	//a->toParsingTable(&grammar);
 }
 
 int main() {
-	test();
+	run();
 }

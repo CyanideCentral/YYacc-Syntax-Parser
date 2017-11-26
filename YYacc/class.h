@@ -1,6 +1,7 @@
 #pragma once
 #include<iostream>
 #include<sstream>
+#include<fstream>
 #include<string>
 #include<algorithm>
 #include<unordered_set>
@@ -14,27 +15,37 @@ class Production {
 public:
 	string left;
 	vector<string>* right;
-	int dot;
-	unordered_set<string>* la;
 
 	Production(string leftNT);
 	~Production();
-	bool equalTo(Production* p);
-	bool equalCore(Production* p, bool ignoreDot = false);
 	string toString();
 	Production* extendRight(string symbol);
 	Production* clone();
 };
 
+class SimpleProd {
+public:
+	int id;
+	int dot;
+	unordered_set<string>* la;
+
+	SimpleProd();
+	~SimpleProd();
+	bool equalTo(SimpleProd* p);
+	bool equalCore(SimpleProd* p, bool ignoreDot = false);
+	string toString();
+	SimpleProd* clone();
+};
+
 class State {
 public:
 	int id;
-	vector<Production*>* prods;
+	vector<SimpleProd*>* prods;
 	unordered_map<string, int>* edges;
 
 	State(int num);
 	~State();
-	bool equalTo(vector<Production*>* ns);
+	bool equalTo(vector<SimpleProd*>* ns);
 	bool insert(Production* prod, int dot = -1, string la = "");
 };
 
@@ -47,11 +58,13 @@ private:
 	//Map from non-terminal to its productions
 	unordered_map<string, vector<int>*>* prodmap;
 	unordered_map<string, int>* symbolmap;
+	unordered_map<string, unordered_set<string>*>* firstmap;
 
 	State* newState();
-	void toClosure(State* st);
+	void toClosure(vector<SimpleProd*>* st);
 	bool isTerminal(string name);
-	int prodid(Production* prod);
+	unordered_set<string>* first(string symbol);
+	//int prodid(Production* prod);
 public:
 	vector<unordered_map<string, int>*>* toParsingTable(vector<Production*>* augGrammar, vector<string>* tokenList);
 
@@ -68,3 +81,7 @@ public:
 	~Parser();
 	void parse(vector<string>* tokens, ostream& out);
 };
+
+vector<string>* split(const string& str, const string& delimiter);
+bool isWhiteSpace(const string& line);
+void run();
